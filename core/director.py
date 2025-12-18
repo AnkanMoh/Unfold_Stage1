@@ -123,34 +123,31 @@ def run_pipeline(user_prompt: str, age: int, difficulty: int, duration_sec: int,
     assets_path = write_asset_manifest(script, image_paths, audio_paths, out_dir)
     from tools.env_utils import has_ffmpeg
     
+    from tools.env_utils import has_ffmpeg
+
     assembled = None
-    final_video_path = None
     captions_srt = None
+    joined_video_path = None
+    final_video_path = None
     
-    try:
-        if has_ffmpeg():
+    if has_ffmpeg():
+        try:
             assembled = assemble(out_dir, script, assets_path, burn_subs)
-            captions_srt = assembled["captions_srt"]
-            final_video_path = assembled["final_video"]
-    except Exception:
-        assembled = None
+            captions_srt = assembled.get("captions_srt")
+            joined_video_path = assembled.get("joined_video")
+            final_video_path = assembled.get("final_video")
+        except Exception:
+            assembled = None
     
     result = {
         "plan": plan.model_dump(),
         "script": script,
         "assets_path": assets_path,
         "captions_srt": captions_srt,
+        "joined_video_path": joined_video_path,
         "final_video_path": final_video_path
     }
-
-    result = {
-        "plan": plan.model_dump(),
-        "script": script,
-        "assets_path": assets_path,
-        "captions_srt": assembled["captions_srt"],
-        "joined_video_path": assembled["joined_video"],
-        "final_video_path": assembled["final_video"]
-    }
+    
     result_path = os.path.join(out_dir, "result.json")
     with open(result_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
