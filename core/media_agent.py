@@ -3,6 +3,7 @@ import json
 import wave
 import struct
 from core.safety import enforce_kid_safety
+from tools.placeholders import solid_png
 
 IMAGE_STYLE = (
     "Kid-friendly colorful 2D cartoon style, clean outlines, simple shapes, "
@@ -25,8 +26,12 @@ def generate_scene_images(genai_client, script: dict, out_dir: str) -> list:
         idx = int(s["index"])
         prompt = f"{IMAGE_STYLE}\nTheme: {s.get('title','')}\nScene: {s.get('visual_prompt','')}"
         enforce_kid_safety(prompt)
-        img_bytes = genai_client.generate_image(prompt=prompt)
         p = os.path.join(out_dir, f"scene_{idx:02d}.png")
+        img_bytes = None
+        try:
+            img_bytes = genai_client.generate_image(prompt=prompt)
+        except Exception:
+            img_bytes = solid_png()
         with open(p, "wb") as f:
             f.write(img_bytes)
         paths.append(p)
