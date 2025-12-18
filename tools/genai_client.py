@@ -8,9 +8,7 @@ class GenAIClient:
     def generate_text(self, system: str, user: str, model: str = "gemini-2.5-flash"):
         resp = self.client.models.generate_content(
             model=model,
-            contents=[
-                {"role": "user", "parts": [{"text": f"System:\n{system}\n\nUser:\n{user}"}]}
-            ]
+            contents=[{"role": "user", "parts": [{"text": f"System:\n{system}\n\nUser:\n{user}"}]}]
         )
         text = getattr(resp, "text", None)
         if not text:
@@ -18,15 +16,11 @@ class GenAIClient:
         return text.strip()
 
     def generate_image(self, prompt: str, model: str = "imagen-3.0-generate-002"):
-        resp = self.client.models.generate_images(
-            model=model,
-            prompt=prompt
-        )
+        resp = self.client.models.generate_images(model=model, prompt=prompt)
         images = getattr(resp, "generated_images", None)
         if not images:
             raise RuntimeError("No image returned")
-        b = images[0].image.image_bytes
-        return b
+        return images[0].image.image_bytes
 
     def generate_audio(self, text: str):
         resp = self.client.models.generate_content(
