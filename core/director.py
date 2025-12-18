@@ -6,13 +6,12 @@ from core.script_agent import generate_script
 from core.media_agent import generate_scene_images, generate_scene_audio, write_asset_manifest
 from core.assembler import assemble
 from tools.genai_client import GenAIClient
+from tools.json_utils import extract_json
 
 DIRECTOR_SYSTEM = (
-    "You are a course producer for kids aged 7 to 12. "
-    "Be child-safe, positive, age-appropriate. "
-    "Plan a short lesson as strict JSON. "
-    "No romance or sexual content, no bullying, no gore. "
-    "Keep it simple and fun."
+    "Return ONLY valid JSON. No markdown. No backticks. No prose. "
+    "You are planning a short kid-safe lesson for ages 7 to 12. "
+    "No romance or sexual content, no bullying, no gore."
 )
 
 def _build_plan(genai_client, user_prompt: str, age: int, difficulty: int, duration_sec: int, theme: str) -> LessonPlan:
@@ -24,34 +23,36 @@ def _build_plan(genai_client, user_prompt: str, age: int, difficulty: int, durat
         "duration_sec": duration_sec,
         "theme": theme,
         "user_prompt": user_prompt,
-        "output_rules": [
+        "required_keys": ["topic", "learning_goals", "safety_rules", "scenes"],
+        "rules": [
             "Return ONLY JSON.",
-            "Keys: topic, learning_goals (max 3), safety_rules, scenes (5 to 7 items).",
-            "Each scene must include: index, title, target_duration_sec (3..60).",
-            "Total target_duration_sec close to duration_sec.",
-            "Scenes should be story-like with theme integration."
-        ],
-        "scene_schema_example": {
-            "index": 1,
-            "title": "Hook",
-            "target_duration_sec": 12
-        }
+            "topic is a short string.",
+            "learning_goals is an array of up to 3 short strings.",
+            "safety_rules is an array of short strings.",
+            "scenes is an array with 5 to 7 items.",
+            "Each scene item must have: index (int), title (string), target_duration_sec (int 3..60).",
+            "Total target_duration_sec should be close to duration_sec."
+        ]
     }
     text = genai_client.generate_text(system=DIRECTOR_SYSTEM, user=json.dumps(req))
     enforce_kid_safety(text)
-    data = json.loads(text)
+    data = extract_json(text)
+
     topic = str(data.get("topic", "Lesson")).strip()[:80] or "Lesson"
     learning_goals = data.get("learning_goals", [])
     if not isinstance(learning_goals, list):
         learning_goals = []
     learning_goals = [str(x).strip()[:120] for x in learning_goals if str(x).strip()][:3]
+
     safety_rules = data.get("safety_rules", [])
     if not isinstance(safety_rules, list):
         safety_rules = []
     safety_rules = [str(x).strip()[:120] for x in safety_rules if str(x).strip()][:8]
+
     raw_scenes = data.get("scenes", [])
     if not isinstance(raw_scenes, list) or len(raw_scenes) < 5:
         raw_scenes = [{"index": i + 1, "title": f"Scene {i+1}", "target_duration_sec": max(8, duration_sec // 6)} for i in range(6)]
+
     scenes = []
     base = max(6, duration_sec // max(5, min(7, len(raw_scenes))))
     for i, s in enumerate(raw_scenes[:7]):
@@ -60,6 +61,7 @@ def _build_plan(genai_client, user_prompt: str, age: int, difficulty: int, durat
         tdur = int(s.get("target_duration_sec", base))
         tdur = max(3, min(60, tdur))
         scenes.append(Scene(index=idx, title=title, narration="", on_screen_text="", visual_prompt="", quiz_prompt=None, target_duration_sec=tdur))
+
     total = sum(x.target_duration_sec for x in scenes)
     if total <= 0:
         total = 1
@@ -67,6 +69,7 @@ def _build_plan(genai_client, user_prompt: str, age: int, difficulty: int, durat
     if scale < 0.7 or scale > 1.3:
         for s in scenes:
             s.target_duration_sec = max(3, min(60, int(round(s.target_duration_sec * scale))))
+
     return LessonPlan(
         age=age,
         difficulty=difficulty,
@@ -83,12 +86,19 @@ def run_pipeline(user_prompt: str, age: int, difficulty: int, duration_sec: int,
     genai_client = GenAIClient(api_key=api_key)
 
     plan = _build_plan(genai_client, user_prompt, age, difficulty, duration_sec, theme)
-    plan_path = os.path.join(out_dir, "plan.json")
+    plan_dir = os.path.join(out_dir, "plan")
+    script_dir = os.path.join(out_dir, "script")
+    media_dir = os.path.join(out_dir, "media")
+    os.makedirs(plan_dir, exist_ok=True)
+    os.makedirs(script_dir, exist_ok=True)
+    os.makedirs(media_dir, exist_ok=True)
+
+    plan_path = os.path.join(plan_dir, "plan.json")
     with open(plan_path, "w", encoding="utf-8") as f:
         json.dump(plan.model_dump(), f, indent=2)
 
     script = generate_script(genai_client, plan)
-    script_path = os.path.join(out_dir, "script.json")
+    script_path = os.path.join(script_dir, "script.json")
     with open(script_path, "w", encoding="utf-8") as f:
         json.dump(script, f, indent=2)
 
