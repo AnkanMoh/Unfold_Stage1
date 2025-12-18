@@ -65,7 +65,9 @@ if st.button("Generate"):
 
     st.subheader("Artifacts")
     st.write(f"Output folder: {out_dir}")
+    if result.get("captions_srt"):
+        st.write(f"Captions: {result['captions_srt']}")
     if result.get("final_video_path") and os.path.exists(result["final_video_path"]):
         st.video(result["final_video_path"])
     else:
-        st.warning("Final video not found. Check FFmpeg installation and logs in the output folder.")
+        st.info("Video rendering disabled (FFmpeg not available). Content-only mode is active.")
