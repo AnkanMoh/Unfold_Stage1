@@ -1,47 +1,34 @@
 import json
 from core.schemas import LessonPlan
 from core.safety import enforce_kid_safety
+from tools.json_utils import extract_json
 
 SCRIPT_SYSTEM = (
+    "Return ONLY valid JSON. No markdown. No backticks. No prose. "
     "You write short educational scripts for kids aged 7 to 12. "
-    "Always be child-safe, positive, and age-appropriate. "
+    "Always child-safe, positive, age-appropriate. "
     "No romance or sexual content, no bullying, no humiliation, no gore. "
-    "Write scene-based output as strict JSON matching the provided schema. "
-    "Use simple words for the given age. Keep on_screen_text under 8 words. "
-    "Add 1 or 2 quiz prompts across the whole lesson. "
-    "Keep total duration close to the requested duration."
+    "Output must be an object with key 'scenes' only."
 )
 
 def generate_script(genai_client, plan: LessonPlan) -> dict:
     plan_json = plan.model_dump()
     enforce_kid_safety(json.dumps(plan_json))
-    schema_hint = {
-        "scenes": [
-            {
-                "index": 1,
-                "title": "string",
-                "narration": "string",
-                "on_screen_text": "string",
-                "visual_prompt": "string",
-                "quiz_prompt": "string or null",
-                "target_duration_sec": 10
-            }
-        ]
-    }
     user_msg = {
         "plan": plan_json,
-        "output_schema_example": schema_hint,
-        "output_rules": [
-            "Return ONLY JSON. No extra keys at top-level except 'scenes'.",
-            "Total scenes between 5 and 7.",
-            "Total target_duration_sec must be close to plan.duration_sec.",
-            "Use the theme strongly in visuals and narration.",
-            "Keep narration friendly and short per scene."
+        "rules": [
+            "Return ONLY JSON.",
+            "Top-level keys: scenes only.",
+            "scenes must be an array of 5 to 7 items.",
+            "Each scene must include: index, title, narration, on_screen_text, visual_prompt, quiz_prompt (nullable), target_duration_sec.",
+            "on_screen_text must be under 8 words.",
+            "Add 1 or 2 quiz_prompt values across the whole lesson.",
+            "Keep language appropriate for the given age."
         ]
     }
     text = genai_client.generate_text(system=SCRIPT_SYSTEM, user=json.dumps(user_msg))
     enforce_kid_safety(text)
-    data = json.loads(text)
+    data = extract_json(text)
     if "scenes" not in data or not isinstance(data["scenes"], list):
         raise ValueError("Bad script JSON")
     return data
