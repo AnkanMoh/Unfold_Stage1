@@ -121,7 +121,27 @@ def run_pipeline(user_prompt: str, age: int, difficulty: int, duration_sec: int,
             audio_paths.append(os.path.join(out_dir, f"scene_{idx:02d}.wav"))
 
     assets_path = write_asset_manifest(script, image_paths, audio_paths, out_dir)
-    assembled = assemble(out_dir, script, assets_path, burn_subs)
+    from tools.env_utils import has_ffmpeg
+    
+    assembled = None
+    final_video_path = None
+    captions_srt = None
+    
+    try:
+        if has_ffmpeg():
+            assembled = assemble(out_dir, script, assets_path, burn_subs)
+            captions_srt = assembled["captions_srt"]
+            final_video_path = assembled["final_video"]
+    except Exception:
+        assembled = None
+    
+    result = {
+        "plan": plan.model_dump(),
+        "script": script,
+        "assets_path": assets_path,
+        "captions_srt": captions_srt,
+        "final_video_path": final_video_path
+    }
 
     result = {
         "plan": plan.model_dump(),
